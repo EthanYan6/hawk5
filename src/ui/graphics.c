@@ -10,6 +10,7 @@
 #include <string.h>
 
 static Cursor cursor;
+static int8_t gSlant = 0; /* 非 0 时向右倾斜：dx = (yy * gSlant) / 7，使 14px 高字形底部约右移 2px */
 
 static const GFXfont *const fonts[] = {&TomThumb, &MuMatrix8ptRegular,
                                        &muHeavy8ptBold, &dig_11, &dig_14};
@@ -99,8 +100,14 @@ static void m_putchar(int16_t x, int16_t y, uint8_t c, Color col, uint8_t sx,
       if (!(bit++ & 7))
         bits = *b++;
       if (bits & 0x80) {
+        /* 上部分向右倾斜；小高度字符(如点)按高度比例缩小倾斜量 */
+        int16_t dx = 0;
+        if (gSlant != 0 && sx == 1 && sy == 1) {
+          int16_t n = (int16_t)(h - 1 - yy) * gSlant;
+          dx = (int16_t)(n * (int16_t)h) / (14 * 14); /* 以 h=14 为基准，点等小字倾斜更少 */
+        }
         (sx == 1 && sy == 1)
-            ? PutPixel(x + xo + xx, y + yo + yy, col)
+            ? PutPixel(x + xo + xx + dx, y + yo + yy, col)
             : FillRect(x + (xo + xx) * sx, y + (yo + yy) * sy, sx, sy, col);
       }
     }
@@ -214,4 +221,15 @@ PX(Small, 0) P(Medium, 1) PX(Medium, 1) P(MediumBold, 2) PX(MediumBold, 2)
 
 void FSmall(uint8_t x, uint8_t y, TextPos a, uint32_t freq) {
   PrintSmallEx(x, y, a, C_FILL, "%u.%05u", freq / MHZ, freq % MHZ);
+}
+
+uint16_t Graphics_GetSmallTextWidth(const char *s) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  getTextBounds(s, 0, 0, &x1, &y1, &w, &h, fonts[0]);
+  return w;
+}
+
+void Graphics_SetSlant(int8_t slant) {
+  gSlant = slant;
 }

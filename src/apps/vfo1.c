@@ -247,14 +247,40 @@ bool VFO1_key(KEY_Code_t key, Key_State_t state) {
   return false;
 }
 
-/* 菜单栏下一行：左侧亚音(R/T)，右侧计时；下移 1 像素 */
+/* 菜单栏下一行：左侧计时，右侧 亚音（有则显示 R/T）+ 芯片完整名；类型为 None 则不显示该项 */
 static void renderDateAndTimerRow(void) {
   const uint8_t rowY = 12;
   uint32_t sec = GetUptimeSec();
+  uint8_t r = (uint8_t)ctx->radio_type;
+  if (r > 2) r = 0;
+  const char *chip = RADIO_NAMES[r];
+  uint16_t chipW = Graphics_GetSmallTextWidth(chip);
+  /* 接收亚音 = rx_code，发射亚音 = tx_code；类型为 None 则不显示 */
+  bool hasRx = (ctx->rx_code.type != CODE_TYPE_OFF);
+  bool hasTx = (ctx->tx_state.tx_code.type != CODE_TYPE_OFF);
+
   PrintSmall(0, rowY, "%u:%02u", sec / 60, sec % 60);
-  PrintSmallEx(LCD_WIDTH - 1, rowY, POS_R, C_FILL, "R%s T%s",
-               RADIO_GetParamValueString(ctx, PARAM_RX_CODE),
-               RADIO_GetParamValueString(ctx, PARAM_TX_CODE));
+
+  if (hasRx || hasTx) {
+    char toneBuf[24];
+    /* GetParamValueString 使用静态缓冲区，第二次调用会覆盖第一次，故先复制再取第二项 */
+    char rxStr[16];
+    char txStr[16];
+    strncpy(rxStr, RADIO_GetParamValueString(ctx, PARAM_RX_CODE),
+            sizeof(rxStr) - 1);
+    rxStr[sizeof(rxStr) - 1] = '\0';
+    strncpy(txStr, RADIO_GetParamValueString(ctx, PARAM_TX_CODE),
+            sizeof(txStr) - 1);
+    txStr[sizeof(txStr) - 1] = '\0';
+    if (hasRx && hasTx)
+      snprintf(toneBuf, sizeof(toneBuf), "R%s T%s", rxStr, txStr);
+    else if (hasRx)
+      snprintf(toneBuf, sizeof(toneBuf), "R%s", rxStr);
+    else
+      snprintf(toneBuf, sizeof(toneBuf), "T%s", txStr);
+    PrintSmallEx(LCD_WIDTH - 1 - chipW - 2, rowY, POS_R, C_FILL, "%s", toneBuf);
+  }
+  PrintSmallEx(LCD_WIDTH - 1, rowY, POS_R, C_FILL, "%s", chip);
 }
 
 /* 中部矩形：下移 1 像素；整体变高 3 像素；底部方框变高 2 像素、内容下移 2 像素 */
@@ -279,39 +305,41 @@ static void renderCenterBlock(uint32_t f) {
     DrawRect(RECT_BAR_W, RECT_TOP, LCD_WIDTH - RECT_BAR_W, rectH, C_FILL);
   }
 
-  /* 框内右上角：仅接收灵敏度(dBm)，上移 5 像素；步进已移至顶部菜单栏 */
+  /* 框内右上角：接收灵敏度(dBm)，右移 2px、上移 1px */
   if (vfo->msm.rssi) {
     int16_t dBm = Rssi2DBm(vfo->msm.rssi);
     if (ctx->radio_type == RADIO_BK4819)
       dBm += (int16_t)BK4819_GetAttenuation();
-    PrintSmallEx(rectR - 1, RECT_TOP + 7, POS_R, C_FILL, "%+d dBm", dBm);
+    PrintSmallEx(rectR + 1, RECT_TOP + 6, POS_R, C_FILL, "%+d dBm", dBm);
   } else {
-    PrintSmallEx(rectR - 1, RECT_TOP + 7, POS_R, C_FILL, "-- dBm");
+    PrintSmallEx(rectR + 1, RECT_TOP + 6, POS_R, C_FILL, "-- dBm");
   }
 
   /* 第一行：信道号或 VFO 用小字+底色反色，相当于信道名左上角；信道名用 Medium */
   const uint8_t line1Y = RECT_TOP + 11;
   const uint8_t boxX = RECT_CONTENT_X + 2;
   if (vfo->mode == MODE_CHANNEL) {
-    const uint8_t badgeW = 27; /* 底色向右扩展 1 像素 */
+    const uint8_t badgeW = 28; /* 底色向右再增加 1 像素 */
     const uint8_t badgeH = 7;
     const uint8_t badgeY = line1Y - 6;
     FillRect(boxX, badgeY, badgeW, badgeH, C_FILL);
     PrintSmallEx(boxX + 2, line1Y - 1, POS_L, C_INVERT, "MR %03u",
                  vfo->channel_index + 1);
-    PrintMediumBoldEx(boxX + badgeW + 2, line1Y, POS_L, C_FILL, "%s", ctx->name);
+    PrintMediumEx(boxX + badgeW + 2, line1Y, POS_L, C_FILL, "%s", ctx->name);
   } else {
-    const uint8_t badgeW = 15; /* 底色向右扩展 1 像素 */
+    const uint8_t badgeW = 16; /* 底色向右再增加 1 像素 */
     const uint8_t badgeH = 7;
     const uint8_t badgeY = line1Y - 6;
     FillRect(boxX, badgeY, badgeW, badgeH, C_FILL);
     PrintSmallEx(boxX + 2, line1Y - 1, POS_L, C_INVERT, "VFO");
   }
-  /* 第二行：大号频率，整体下移 2px、右移 2px；两位小数与频率间隔 2 像素 */
-  const uint8_t freqY = RECT_TOP + 26;
+  /* 第二行：大号频率上部分向右倾斜，顶部约 3px、向下渐变至 0，顺滑 */
+  const uint8_t freqY = RECT_TOP + 28;
+  Graphics_SetSlant(4); /* 顶部偏移约 3 像素，随 yy 线性减至 0 */
   PrintBiggestDigitsEx(boxX, freqY, POS_L, C_FILL,
                        "%4u.%03u", f / MHZ, f / 100 % 1000);
-  PrintMediumEx(boxX + 77, freqY, POS_L, C_FILL, "%02u", f % 100);
+  PrintMediumEx(boxX + 73, freqY, POS_L, C_FILL, "%02u", f % 100);
+  Graphics_SetSlant(0);
 }
 
 /* 底部两个实心方框：变高 2 像素；方框内 Menu/调制 文字下移 2 像素 */

@@ -105,7 +105,7 @@ typedef struct {
     uint8_t power_level; // Уровень мощности
     TXStatus last_error;
     ModulationType modulation; // Модуляция TX
-    Code code;
+    Code tx_code;               // 发射亚音 (TX)
     OffsetDirection offsetDirection;
     bool dirty;     // Флаг изменения параметров TX
     bool is_active; // true, если идёт передача
@@ -127,7 +127,7 @@ typedef struct {
   uint8_t afc;
   uint8_t afc_speed;
   uint8_t mic;
-  Code code;
+  Code rx_code;   // 接收亚音 (RX)
   Step step;
   Radio radio_type;
   ModulationType modulation; // Текущая модуляция

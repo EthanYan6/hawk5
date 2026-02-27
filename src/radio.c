@@ -236,14 +236,14 @@ static uint32_t getRealTxFreq(const VFOContext *ctx) {
 }
 
 static void enableCxCSS(VFOContext *ctx) {
-  switch (ctx->tx_state.code.type) {
+  switch (ctx->tx_state.tx_code.type) {
   case CODE_TYPE_CONTINUOUS_TONE:
-    BK4819_SetCTCSSFrequency(CTCSS_Options[ctx->tx_state.code.value]);
+    BK4819_SetCTCSSFrequency(CTCSS_Options[ctx->tx_state.tx_code.value]);
     break;
   case CODE_TYPE_DIGITAL:
   case CODE_TYPE_REVERSE_DIGITAL:
-    BK4819_SetCDCSSCodeWord(DCS_GetGolayCodeWord(ctx->tx_state.code.type,
-                                                 ctx->tx_state.code.value));
+    BK4819_SetCDCSSCodeWord(DCS_GetGolayCodeWord(ctx->tx_state.tx_code.type,
+                                                 ctx->tx_state.tx_code.value));
     break;
   default:
     BK4819_ExitSubAu();
@@ -260,17 +260,17 @@ static void setupToneDetection(VFOContext *ctx) {
   } else {
     BK4819_DisableDTMF();
   }
-  switch (ctx->code.type) {
+  switch (ctx->rx_code.type) {
   case CODE_TYPE_DIGITAL:
   case CODE_TYPE_REVERSE_DIGITAL:
     // Log("DCS on");
     BK4819_SetCDCSSCodeWord(
-        DCS_GetGolayCodeWord(ctx->code.type, ctx->code.value));
+        DCS_GetGolayCodeWord(ctx->rx_code.type, ctx->rx_code.value));
     InterruptMask |= BK4819_REG_3F_CDCSS_FOUND | BK4819_REG_3F_CDCSS_LOST;
     break;
   case CODE_TYPE_CONTINUOUS_TONE:
     // Log("CTCSS on");
-    BK4819_SetCTCSSFrequency(CTCSS_Options[ctx->code.value]);
+    BK4819_SetCTCSSFrequency(CTCSS_Options[ctx->rx_code.value]);
     InterruptMask |= BK4819_REG_3F_CTCSS_FOUND | BK4819_REG_3F_CTCSS_LOST;
     break;
   default:
@@ -927,10 +927,10 @@ void RADIO_SetParam(VFOContext *ctx, ParamType param, uint32_t value,
     ctx->dirty[PARAM_BANDWIDTH] = true;
     break;
   case PARAM_RX_CODE:
-    ctx->code.value = value;
+    ctx->rx_code.value = value;
     break;
   case PARAM_TX_CODE:
-    ctx->tx_state.code.value = value;
+    ctx->tx_state.tx_code.value = value;
     break;
 
   case PARAM_PRECISE_F_CHANGE:
@@ -1044,9 +1044,9 @@ void RADIO_SetParam(VFOContext *ctx, ParamType param, uint32_t value,
 uint32_t RADIO_GetParam(const VFOContext *ctx, ParamType param) {
   switch (param) {
   case PARAM_RX_CODE:
-    return ctx->code.value;
+    return ctx->rx_code.value;
   case PARAM_TX_CODE:
-    return ctx->tx_state.code.value;
+    return ctx->tx_state.tx_code.value;
   case PARAM_TX_OFFSET:
     return ctx->tx_state.frequency;
   case PARAM_TX_OFFSET_DIR:
@@ -1517,8 +1517,8 @@ static void setCommonParamsFromCh(VFOContext *ctx, const VFO *storage) {
 
   strcpy(ctx->name, storage->name);
 
-  ctx->code = storage->code.rx;
-  ctx->tx_state.code = storage->code.tx;
+  ctx->rx_code = storage->code.rx;
+  ctx->tx_state.tx_code = storage->code.tx;
 
   // Initialize TX state
   ctx->tx_state.is_active = false;
@@ -1586,8 +1586,8 @@ void RADIO_SaveVFOToStorage(const RadioState *state, uint8_t vfo_index,
   storage->gainIndex = ctx->gain;
   storage->squelch = ctx->squelch;
 
-  storage->code.rx = ctx->code;
-  storage->code.tx = ctx->tx_state.code;
+  storage->code.rx = ctx->rx_code;
+  storage->code.tx = ctx->tx_state.tx_code;
 
   storage->txF = ctx->tx_state.frequency;
   storage->offsetDir = ctx->tx_state.offsetDirection;
@@ -1938,6 +1938,10 @@ const char *RADIO_GetParamValueString(const VFOContext *ctx, ParamType param) {
       }
       return BW_NAMES_SI47XX[v];
     }
+    if (ctx->radio_type == RADIO_BK1080) {
+      buf[0] = '\0';
+      return buf;
+    }
     return "?(WIP)";
   case PARAM_STEP:
     sprintf(buf, "%d.%02d", StepFrequencyTable[v] / KHZ,
@@ -1967,11 +1971,11 @@ const char *RADIO_GetParamValueString(const VFOContext *ctx, ParamType param) {
     break;
 
   case PARAM_RX_CODE:
-    PrintRTXCode(buf, ctx->code.type, ctx->code.value);
+    PrintRTXCode(buf, ctx->rx_code.type, ctx->rx_code.value);
     break;
 
   case PARAM_TX_CODE:
-    PrintRTXCode(buf, ctx->tx_state.code.type, ctx->tx_state.code.value);
+    PrintRTXCode(buf, ctx->tx_state.tx_code.type, ctx->tx_state.tx_code.value);
     break;
 
   case PARAM_POWER:

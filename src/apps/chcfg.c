@@ -360,7 +360,7 @@ static void setValue(MemProp p, uint32_t v) {
     break;
   case MEM_TX_CODE_TYPE:
     gChEd.code.tx.type = v;
-    gChEd.code.rx.value = 0;
+    gChEd.code.tx.value = 0;
     break;
   case MEM_TX_CODE:
     gChEd.code.tx.value = v;

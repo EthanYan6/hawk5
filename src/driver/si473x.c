@@ -2,6 +2,7 @@
 #include "../external/printf/printf.h"
 #include "../inc/dp32g030/gpio.h"
 #include "../misc.h"
+#include "../scheduler.h"
 #include "../settings.h"
 #include "../system.h"
 #include "audio.h"
@@ -61,12 +62,21 @@ bool SI47XX_IsSSB() {
   return si4732mode == SI47XX_USB || si4732mode == SI47XX_LSB;
 }
 
+/* 若 SI4732 未连接或未响应，超时后退出，避免卡死 */
+#define SI47XX_CTS_TIMEOUT_MS 300
+
 void waitToSend() {
   uint8_t tmp = 0;
+  uint32_t start = Now();
   do {
     TIMER_DelayUs(1);
-    SI47XX_ReadBuffer((uint8_t *)&tmp, 1);
-  } while (!(tmp & STATUS_CTS));
+    if (SI47XX_ReadBuffer((uint8_t *)&tmp, 1) && (tmp & STATUS_CTS)) {
+      return;
+    }
+    if ((Now() - start) >= SI47XX_CTS_TIMEOUT_MS) {
+      return; /* 超时退出，防止无 SI4732 时死循环 */
+    }
+  } while (1);
 }
 
 #include "../ui/graphics.h" // X_X

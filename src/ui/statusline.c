@@ -11,6 +11,7 @@
 #include "../scheduler.h"
 #include "components.h"
 #include "graphics.h"
+#include <stdio.h>
 #include <string.h>
 
 static uint8_t previousBatteryLevel = 255;
@@ -84,6 +85,7 @@ void STATUSLINE_render(void) {
       if (i < n)
         FillRect(x, byBase - h, 2, h, C_FILL);
     }
+    /* 文字从 20 起；电池左缘=115；图标区右缘=105 */
     textLeft = 20;
   }
 
@@ -139,8 +141,8 @@ void STATUSLINE_render(void) {
   if (gIsNumNavInput) {
     PrintSmall(textLeft, BASE_Y, "Select: %s", gNumNavInput);
   } else {
-    PrintSmall(textLeft, BASE_Y,
-               statuslineTicker[0] == '\0' ? statuslineText : statuslineTicker);
+    PrintSmall(textLeft, BASE_Y, "%s",
+               statuslineTicker[0] ? statuslineTicker : statuslineText);
   }
 }
 
@@ -160,18 +162,26 @@ void STATUSLINE_RenderRadioSettings() {
   strcpy(step, RADIO_GetParamValueString(ctx, PARAM_STEP));
 
   if (gCurrentApp == APP_VFO1) {
-    /* 1 VFO 页：信号(左侧已画)、直频符号、芯片、带宽、静噪类型、静噪值、步进 */
-    static const char *const chipShort[] = {"BK19", "BK80", "SI32"};
-    uint8_t r = (uint8_t)ctx->radio_type;
-    if (r > 2) r = 0;
     uint32_t rxF = RADIO_GetParam(ctx, PARAM_FREQUENCY);
     uint32_t txF = RADIO_GetParam(ctx, PARAM_TX_FREQUENCY_FACT);
     bool direct = (rxF == txF);
-    STATUSLINE_SetText("%s%s %s %s %s %s",
-                       direct ? "|->| " : "", chipShort[r], bandwidth,
-                       squelch_type, squelch_value, step);
+    if (bandwidth[0] == '\0') {
+      /* WFM 等无带宽时不显示带宽 */
+      STATUSLINE_SetText("%s %s %s %s",
+                        direct ? "|->| " : "", squelch_type, squelch_value,
+                        step);
+    } else {
+      STATUSLINE_SetText("%s %s %s %s %s",
+                        direct ? "|->| " : "", bandwidth,
+                        squelch_type, squelch_value, step);
+    }
   } else {
-    STATUSLINE_SetText("%s %s %s %s %s", gain, bandwidth, squelch_type,
-                      squelch_value, modulation);
+    if (bandwidth[0] == '\0') {
+      STATUSLINE_SetText("%s %s %s %s", gain, squelch_type, squelch_value,
+                         modulation);
+    } else {
+      STATUSLINE_SetText("%s %s %s %s %s", gain, bandwidth, squelch_type,
+                        squelch_value, modulation);
+    }
   }
 }

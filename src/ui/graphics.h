@@ -79,4 +79,8 @@ void PrintSymbolsEx(uint8_t x, uint8_t y, TextPos posLCR, Color color,
                     const char *pattern, ...);
 void FSmall(uint8_t x, uint8_t y, TextPos align, uint32_t frequency);
 
+uint16_t Graphics_GetSmallTextWidth(const char *s);
+
+void Graphics_SetSlant(int8_t slant);
+
 #endif /* end of include guard: GRAPHICS_H */
