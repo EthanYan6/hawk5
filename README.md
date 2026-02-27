@@ -18,6 +18,9 @@ make
 
 ## 1 Motorola R7 界面说明
 
+<img width="696" height="918" alt="image" src="https://github.com/user-attachments/assets/7c66b2e1-038b-4c60-ac27-6877dc0500fb" />
+
+
 主界面自上而下分为四块：顶部菜单栏、菜单栏下一行、中间方框、底部两个方框。
 
 ### 顶部菜单栏
