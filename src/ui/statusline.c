@@ -6,6 +6,7 @@
 #include "../helper/bands.h"
 #include "../helper/battery.h"
 #include "../helper/channels.h"
+#include "../helper/measurements.h"
 #include "../helper/numnav.h"
 #include "../scheduler.h"
 #include "components.h"
@@ -68,6 +69,24 @@ void STATUSLINE_render(void) {
 
   DrawHLine(0, 6, LCD_WIDTH, C_FILL);
 
+  uint8_t textLeft = 0;
+  if (gCurrentApp == APP_VFO1) {
+    const uint8_t ax = 0, ay = 0;
+    const uint8_t bx = 4, byBase = 5;
+    DrawVLine(ax + 1, ay + 1, 4, C_FILL);
+    DrawHLine(ax, ay, 3, C_FILL);
+    uint16_t rssi = vfo->msm.rssi;
+    uint8_t n =
+        (rssi <= RSSI_MIN) ? 1 : (rssi >= RSSI_MAX ? 5 : (1 + (rssi - RSSI_MIN) * 4 / (RSSI_MAX - RSSI_MIN)));
+    for (uint8_t i = 0; i < 5; i++) {
+      uint8_t h = i + 1;
+      uint8_t x = bx + i * 3;
+      if (i < n)
+        FillRect(x, byBase - h, 2, h, C_FILL);
+    }
+    textLeft = 20;
+  }
+
   if (showBattery) {
     switch (gSettings.batteryStyle) {
     case BAT_CLEAN:
@@ -118,9 +137,9 @@ void STATUSLINE_render(void) {
   PrintSymbolsEx(LCD_WIDTH - 1 - 22, BASE_Y, POS_R, C_FILL, "%s", icons);
 
   if (gIsNumNavInput) {
-    PrintSmall(0, BASE_Y, "Select: %s", gNumNavInput);
+    PrintSmall(textLeft, BASE_Y, "Select: %s", gNumNavInput);
   } else {
-    PrintSmall(0, BASE_Y,
+    PrintSmall(textLeft, BASE_Y,
                statuslineTicker[0] == '\0' ? statuslineText : statuslineTicker);
   }
 }
@@ -131,13 +150,28 @@ void STATUSLINE_RenderRadioSettings() {
   char squelch_type[8];
   char squelch_value[8];
   char modulation[8];
+  char step[8];
 
   strcpy(gain, RADIO_GetParamValueString(ctx, PARAM_GAIN));
   strcpy(bandwidth, RADIO_GetParamValueString(ctx, PARAM_BANDWIDTH));
   strcpy(squelch_type, RADIO_GetParamValueString(ctx, PARAM_SQUELCH_TYPE));
   strcpy(squelch_value, RADIO_GetParamValueString(ctx, PARAM_SQUELCH_VALUE));
   strcpy(modulation, RADIO_GetParamValueString(ctx, PARAM_MODULATION));
+  strcpy(step, RADIO_GetParamValueString(ctx, PARAM_STEP));
 
-  STATUSLINE_SetText("%s %s %s %s %s", gain, bandwidth, squelch_type,
-                     squelch_value, modulation);
+  if (gCurrentApp == APP_VFO1) {
+    /* 1 VFO 页：信号(左侧已画)、直频符号、芯片、带宽、静噪类型、静噪值、步进 */
+    static const char *const chipShort[] = {"BK19", "BK80", "SI32"};
+    uint8_t r = (uint8_t)ctx->radio_type;
+    if (r > 2) r = 0;
+    uint32_t rxF = RADIO_GetParam(ctx, PARAM_FREQUENCY);
+    uint32_t txF = RADIO_GetParam(ctx, PARAM_TX_FREQUENCY_FACT);
+    bool direct = (rxF == txF);
+    STATUSLINE_SetText("%s%s %s %s %s %s",
+                       direct ? "|->| " : "", chipShort[r], bandwidth,
+                       squelch_type, squelch_value, step);
+  } else {
+    STATUSLINE_SetText("%s %s %s %s %s", gain, bandwidth, squelch_type,
+                      squelch_value, modulation);
+  }
 }

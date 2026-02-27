@@ -1,6 +1,8 @@
 #include "vfo1.h"
 #include "../dcs.h"
+#include "../driver/bk4819.h"
 #include "../driver/gpio.h"
+#include "../driver/systick.h"
 #include "../driver/uart.h"
 #include "../external/printf/printf.h"
 #include "../helper/bands.h"
@@ -21,9 +23,8 @@
 #include "chlist.h"
 #include "finput.h"
 #include <stdint.h>
-
-static char String[16];
-static const Step liveStep = STEP_5_0kHz;
+#include <stdio.h>
+#include <string.h>
 
 static void updateBand(void) {
   uint32_t f = RADIO_GetParam(ctx, PARAM_FREQUENCY);
@@ -198,12 +199,7 @@ static bool handleRelease(KEY_Code_t key, Key_State_t state) {
       gMonitorMode = false;
       return true;
     }
-    if (!APPS_exit()) {
-      RADIO_SaveCurrentVFO(gRadioState);
-      RADIO_SwitchVFO(gRadioState,
-                      IncDecU(vfoN, 0, gRadioState->num_vfos, true));
-      updateBand();
-    }
+    APPS_exit();
     return true;
 
   default:
@@ -251,28 +247,88 @@ bool VFO1_key(KEY_Code_t key, Key_State_t state) {
   return false;
 }
 
-static void renderTxRxState(uint8_t y, bool isTx) {
-  if (isTx) {
-    if (ctx->tx_state.is_active) {
-      PrintMediumEx(0, 21, POS_L, C_FILL, "TX");
-    } else {
-      PrintMediumBoldEx(LCD_XCENTER, y, POS_C, C_FILL, "%s",
-                        RADIO_GetParamValueString(ctx, PARAM_TX_STATE));
-    }
-  } else if (vfo->msm.open) {
-    PrintMediumEx(0, 21, POS_L, C_FILL, "RX");
-  }
+/* 菜单栏下一行：左侧亚音(R/T)，右侧计时；下移 1 像素 */
+static void renderDateAndTimerRow(void) {
+  const uint8_t rowY = 12;
+  uint32_t sec = GetUptimeSec();
+  PrintSmall(0, rowY, "%u:%02u", sec / 60, sec % 60);
+  PrintSmallEx(LCD_WIDTH - 1, rowY, POS_R, C_FILL, "R%s T%s",
+               RADIO_GetParamValueString(ctx, PARAM_RX_CODE),
+               RADIO_GetParamValueString(ctx, PARAM_TX_CODE));
 }
 
-static void renderChannelName(uint8_t y, uint16_t channel) {
-  uint8_t vfoN = RADIO_GetCurrentVFONumber(gRadioState);
-  FillRect(0, y - 14, 30, 7, C_FILL);
-  PrintSmallEx(15, y - 9, POS_C, C_INVERT, "VFO %u/%u", vfoN + 1,
-               gRadioState->num_vfos);
-  if (gRadioState->vfos[vfoN].mode == MODE_CHANNEL) {
-    PrintSmallEx(32, y - 9, POS_L, C_FILL, "MR %03u", channel);
-    UI_Scanlists(LCD_WIDTH - 25, y - 13, gSettings.currentScanlist);
+/* 中部矩形：下移 1 像素；整体变高 3 像素；底部方框变高 2 像素、内容下移 2 像素 */
+#define RECT_TOP      14
+#define RECT_BOTTOM   46
+#define RECT_BAR_W    4
+#define RECT_CONTENT_X (RECT_BAR_W + 2)
+#define BOTTOM_GAP    5
+#define BOTTOM_BOX_TOP  54
+#define BOTTOM_BOX_H    10
+
+static void renderCenterBlock(uint32_t f) {
+  const uint8_t rectH = RECT_BOTTOM - RECT_TOP + 1;
+  const uint8_t rectR = LCD_WIDTH - RECT_BAR_W; /* 框右边界（不含条） */
+  /* 左侧长条：有信号时空心，无信号时实心 */
+  if (vfo->msm.open) {
+    DrawRect(0, RECT_TOP, RECT_BAR_W, rectH, C_FILL);
+    /* 空心时右侧框与长条共用一条边线，中间只留 1 像素线 */
+    DrawRect(RECT_BAR_W - 1, RECT_TOP, LCD_WIDTH - (RECT_BAR_W - 1), rectH, C_FILL);
+  } else {
+    FillRect(0, RECT_TOP, RECT_BAR_W, rectH, C_FILL);
+    DrawRect(RECT_BAR_W, RECT_TOP, LCD_WIDTH - RECT_BAR_W, rectH, C_FILL);
   }
+
+  /* 框内右上角：仅接收灵敏度(dBm)，上移 5 像素；步进已移至顶部菜单栏 */
+  if (vfo->msm.rssi) {
+    int16_t dBm = Rssi2DBm(vfo->msm.rssi);
+    if (ctx->radio_type == RADIO_BK4819)
+      dBm += (int16_t)BK4819_GetAttenuation();
+    PrintSmallEx(rectR - 1, RECT_TOP + 7, POS_R, C_FILL, "%+d dBm", dBm);
+  } else {
+    PrintSmallEx(rectR - 1, RECT_TOP + 7, POS_R, C_FILL, "-- dBm");
+  }
+
+  /* 第一行：信道号或 VFO 用小字+底色反色，相当于信道名左上角；信道名用 Medium */
+  const uint8_t line1Y = RECT_TOP + 11;
+  const uint8_t boxX = RECT_CONTENT_X + 2;
+  if (vfo->mode == MODE_CHANNEL) {
+    const uint8_t badgeW = 27; /* 底色向右扩展 1 像素 */
+    const uint8_t badgeH = 7;
+    const uint8_t badgeY = line1Y - 6;
+    FillRect(boxX, badgeY, badgeW, badgeH, C_FILL);
+    PrintSmallEx(boxX + 2, line1Y - 1, POS_L, C_INVERT, "MR %03u",
+                 vfo->channel_index + 1);
+    PrintMediumBoldEx(boxX + badgeW + 2, line1Y, POS_L, C_FILL, "%s", ctx->name);
+  } else {
+    const uint8_t badgeW = 15; /* 底色向右扩展 1 像素 */
+    const uint8_t badgeH = 7;
+    const uint8_t badgeY = line1Y - 6;
+    FillRect(boxX, badgeY, badgeW, badgeH, C_FILL);
+    PrintSmallEx(boxX + 2, line1Y - 1, POS_L, C_INVERT, "VFO");
+  }
+  /* 第二行：大号频率，整体下移 2px、右移 2px；两位小数与频率间隔 2 像素 */
+  const uint8_t freqY = RECT_TOP + 26;
+  PrintBiggestDigitsEx(boxX, freqY, POS_L, C_FILL,
+                       "%4u.%03u", f / MHZ, f / 100 % 1000);
+  PrintMediumEx(boxX + 77, freqY, POS_L, C_FILL, "%02u", f % 100);
+}
+
+/* 底部两个实心方框：变高 2 像素；方框内 Menu/调制 文字下移 2 像素 */
+static void renderBottomBoxes(void) {
+  const uint8_t y = BOTTOM_BOX_TOP;
+  const uint8_t h = BOTTOM_BOX_H;
+  const uint8_t contentH = h > 2 ? h - 2 : h;
+  const uint8_t textY = y + 3 + contentH / 2;
+  const uint8_t leftW = 63;
+  const uint8_t rightX = 64;
+  const uint8_t rightW = 64;
+  FillRect(0, y, leftW, h, C_FILL);
+  FillRect(rightX, y, rightW, h, C_FILL);
+  DrawVLine(63, y, h, C_CLEAR);
+  PrintMediumEx(leftW / 2, textY, POS_C, C_INVERT, "Menu");
+  PrintMediumEx(rightX + rightW / 2, textY, POS_C, C_INVERT, "%s",
+               RADIO_GetParamValueString(ctx, PARAM_MODULATION));
 }
 
 static void renderStatusLine(void) {
@@ -288,147 +344,21 @@ static void renderStatusLine(void) {
   }
 }
 
-static void renderBandInfo(uint8_t BASE) {
-  if (vfo->mode == MODE_CHANNEL) {
-    PrintMediumEx(LCD_XCENTER, BASE - 16, POS_C, C_FILL, "%s", ctx->name);
-  } else {
-    const char *format =
-        (gCurrentBand.meta.type == TYPE_BAND_DETACHED) ? "*%s" : "%s:%u";
-    uint32_t channel = CHANNELS_GetChannel(&gCurrentBand, ctx->frequency) + 1;
-
-    if (gCurrentBand.meta.type == TYPE_BAND_DETACHED) {
-      PrintSmallEx(32, 12, POS_L, C_FILL, format, gCurrentBand.name);
-    } else {
-      PrintSmallEx(32, 12, POS_L, C_FILL, format, gCurrentBand.name, channel);
-    }
-  }
-}
-
-static void renderCodes(uint8_t BASE) {
-  if (ctx->code.type) {
-    PrintSmallEx(0, BASE - 6, POS_L, C_FILL, "R%s",
-                 RADIO_GetParamValueString(ctx, PARAM_RX_CODE));
-  }
-  if (ctx->tx_state.code.type) {
-    PrintSmallEx(0, BASE, POS_L, C_FILL, "T%s",
-                 RADIO_GetParamValueString(ctx, PARAM_TX_CODE));
-  }
-}
-
-static void renderExtraInfo(uint8_t BASE) {
-  uint32_t txF = RADIO_GetParam(ctx, PARAM_TX_FREQUENCY_FACT);
-  uint32_t rxF = RADIO_GetParam(ctx, PARAM_FREQUENCY);
-  bool isTxFDifferent = (txF != rxF);
-
-  int16_t afcVal = BK4819_GetAFCValue();
-  if (afcVal != 0) {
-    PrintSmallEx(14, 21, POS_L, C_FILL, "%+d", BK4819_GetAFCValue() * 10);
-  }
-
-  if (isTxFDifferent) {
-    PrintSmallEx(LCD_XCENTER, BASE + 6, POS_C, C_FILL, "TX: %s",
-                 RADIO_GetParamValueString(ctx, PARAM_TX_FREQUENCY_FACT));
-  }
-}
-
-static void renderLootInfo(void) {
-  if (!gLastActiveLoot)
-    return;
-
-  const uint32_t ago = (Now() - gLastActiveLoot->lastTimeOpen) / 1000;
-
-  if (gLastActiveLoot->ct != 255) {
-    PrintRTXCode(String, CODE_TYPE_CONTINUOUS_TONE, gLastActiveLoot->ct);
-    PrintSmallEx(0, LCD_HEIGHT - 1, POS_L, C_FILL, "%s", String);
-  } else if (gLastActiveLoot->cd != 255) {
-    PrintRTXCode(String, CODE_TYPE_DIGITAL, gLastActiveLoot->cd);
-    PrintSmallEx(0, LCD_HEIGHT - 1, POS_L, C_FILL, "%s", String);
-  }
-
-  UI_DrawLoot(gLastActiveLoot, LCD_XCENTER, LCD_HEIGHT - 1, POS_C);
-
-  if (ago) {
-    PrintSmallEx(LCD_WIDTH, LCD_HEIGHT - 1, POS_R, C_FILL, "%u:%02u", ago / 60,
-                 ago % 60);
-  }
-
-  if (gRadioState->multiwatch_enabled) {
-    PrintMediumEx(LCD_XCENTER, LCD_HEIGHT - 9, POS_C, C_FILL, "M");
-  }
-}
-
-static void renderMonitorMode(uint8_t BASE) {
-  SPECTRUM_Y = BASE + 2;
-  SPECTRUM_H = LCD_HEIGHT - SPECTRUM_Y;
-
-  if (false && gSettings.showLevelInVFO) {
-    static char *graphMeasurementNames[] = {
-        [GRAPH_RSSI] = "RSSI",
-        [GRAPH_NOISE] = "Noise",
-        [GRAPH_GLITCH] = "Glitch",
-        [GRAPH_SNR] = "SNR",
-    };
-
-    static const struct {
-      uint8_t min;
-      uint8_t max;
-    } graphRanges[] = {
-        [GRAPH_RSSI] = {RSSI_MIN, RSSI_MAX},
-        [GRAPH_NOISE] = {0, 255},
-        [GRAPH_GLITCH] = {0, 255},
-        [GRAPH_SNR] = {0, 30},
-        [GRAPH_COUNT] = {RSSI_MIN, RSSI_MAX},
-    };
-
-    SP_RenderGraph(graphRanges[graphMeasurement].min,
-                   graphRanges[graphMeasurement].max);
-    PrintSmallEx(0, SPECTRUM_Y + 5, POS_L, C_FILL, "%s %+3u",
-                 graphMeasurementNames[graphMeasurement],
-                 SP_GetLastGraphValue());
-  } else {
-    UI_RSSIBar(BASE + 1);
-  }
-}
-
 void VFO1_render(void) {
-  // return;
-  const uint8_t BASE = 40;
-
   renderStatusLine();
 
   uint32_t f = RADIO_GetParam(
       ctx, ctx->tx_state.is_active ? PARAM_TX_FREQUENCY_FACT : PARAM_FREQUENCY);
-  const char *mod = RADIO_GetParamValueString(ctx, PARAM_MODULATION);
 
-  renderBandInfo(BASE);
-  renderTxRxState(BASE - 4,
-                  ctx->tx_state.is_active || ctx->tx_state.last_error);
-
-  if (!ctx->tx_state.last_error) {
-    UI_BigFrequency(BASE, f);
-  }
-
-  PrintMediumEx(LCD_WIDTH - 1, BASE - 12, POS_R, C_FILL, mod);
-  renderChannelName(21, vfo->channel_index);
-
-  const uint32_t step = StepFrequencyTable[ctx->step];
-  PrintSmallEx(LCD_WIDTH, BASE + 6, POS_R, C_FILL, "%d.%02d", step / KHZ,
-               step % KHZ);
-
-  renderCodes(BASE);
-  renderExtraInfo(BASE);
-  renderLootInfo();
-
+  renderDateAndTimerRow();
   if (gMonitorMode) {
-    renderMonitorMode(BASE);
+    SPECTRUM_Y = RECT_TOP + 2;
+    SPECTRUM_H = RECT_BOTTOM - RECT_TOP - 2;
+    UI_RSSIBar(RECT_BOTTOM - 8);
   } else {
-    if (vfo->msm.open) {
-      UI_RSSIBar(BASE + 1);
-    }
-    if (ctx->tx_state.is_active) {
-      UI_TxBar(BASE + 1);
-    }
+    renderCenterBlock(f);
   }
+  renderBottomBoxes();
 
   REGSMENU_Draw();
 }
