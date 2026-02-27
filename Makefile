@@ -49,8 +49,13 @@ SIZE     := $(TOOLCHAIN_PREFIX)size
 # =============================================================================
 # Common flags for AS and CC
 COMMON_FLAGS := -mcpu=cortex-m0 -mthumb -mabi=aapcs
-OPTIMIZATION := -Os -flto=auto -ffunction-sections -fdata-sections
-# OPTIMIZATION := -Os -ffunction-sections -fdata-sections
+# LTO 可显著减小体积；Windows 下若 lto-wrapper 报错则执行 make LTO=0
+LTO ?= 1
+ifeq ($(LTO),1)
+OPTIMIZATION := -Os -flto=1 -ffunction-sections -fdata-sections
+else
+OPTIMIZATION := -Os -ffunction-sections -fdata-sections
+endif
 
 # Assembler flags
 ASFLAGS  := $(COMMON_FLAGS) -c
@@ -66,6 +71,7 @@ CFLAGS   := $(COMMON_FLAGS) $(OPTIMIZATION) \
             -fno-delete-null-pointer-checks \
             -fsingle-precision-constant \
             -finline-functions-called-once \
+            -fno-unwind-tables -fno-asynchronous-unwind-tables \
             -MMD -MP
 
 # Debug/Release specific flags
@@ -91,7 +97,7 @@ LDFLAGS  := $(COMMON_FLAGS) $(OPTIMIZATION) \
             -nostartfiles \
             -Tfirmware.ld \
             --specs=nano.specs \
-            -lc -lnosys -lm \
+            -lc -lnosys \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
             -Wl,--print-memory-usage \
@@ -113,7 +119,7 @@ endif
 # =============================================================================
 # Build Rules
 # =============================================================================
-.PHONY: all debug release clean help info flash
+.PHONY: all debug release clean help info flash sizes
 
 # Основная цель
 all: $(TARGET).bin
@@ -134,7 +140,7 @@ $(TARGET).bin: $(TARGET)
 	@echo "Creating binary file..."
 	$(OBJCOPY) -O binary $< $@
 	@if [ -f fw-pack.py ]; then \
-		python3 fw-pack.py $@ $(GIT_HASH) $(TARGET).packed.bin; \
+		python3 fw-pack.py $@ $(GIT_HASH) $(TARGET).packed.bin 2>/dev/null || python fw-pack.py $@ $(GIT_HASH) $(TARGET).packed.bin; \
 	else \
 		echo "Warning: fw-pack.py not found, skipping packing"; \
 		cp $@ $(TARGET).packed.bin; \
@@ -191,6 +197,10 @@ info:
 	@echo "Source Files: $(words $(SRC)) files"
 	@echo "Object Files: $(words $(OBJS)) files"
 
+# 显示各 .o 体积（便于排查 FLASH 占用）
+sizes:
+	@$(SIZE) $(OBJS) 2>/dev/null | sort -k1 -rn || true
+
 # Очистка
 clean:
 	@echo "Cleaning build artifacts..."
@@ -211,11 +221,13 @@ help:
 	@echo "  release  - Build release firmware with timestamp"
 	@echo "  clean    - Remove build artifacts"
 	@echo "  distclean- Remove all generated files"
+	@echo "  sizes    - Show size of each .o file (after build)"
 	@echo "  info     - Show build configuration"
 	@echo "  help     - Show this help message"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make              # Build release version"
+	@echo "  make LTO=0        # If lto-wrapper fails on Windows"
 	@echo "  make debug        # Build debug version"
 	@echo "  make release      # Build and package release"
 	@echo "  make BUILD_TYPE=debug  # Alternative debug build"

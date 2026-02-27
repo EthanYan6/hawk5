@@ -9,6 +9,7 @@ _Min_Heap_Size = 0;      /* required amount of heap  */
 _Min_Stack_Size = 0x100; /* required amount of stack (256 bytes min recommended) */
 
 /* Specify the memory areas */
+/* 若芯片实际为 64KB Flash，可将下方 60K 改为 64K 以解决 overflow */
 MEMORY
 {
     FLASH (rx)      : ORIGIN = 0x00000000, LENGTH = 60K
