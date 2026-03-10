@@ -161,17 +161,18 @@ void STATUSLINE_render(void) {
 #define STATUS_GAP 2 /* 中间区域各元素统一间距 */
 
     if (gCurrentApp == APP_VFO1 && showDirectIcon) {
-      /* 直频 |->| → [GAP] → 功率 → [GAP] → 状态文字 */
-      const uint8_t lineH = 6;
+      /* 直频 |->| → [GAP] → 功率 → [紧贴] → 状态文字；两条竖线下方减少 1px */
+      const uint8_t lineH = 5;
+      const uint8_t lineY = BASE_Y - 4; /* 上移 4 像素，不越过横线 */
       const uint8_t iconX = textLeft;
       uint16_t arrowW = Graphics_GetSmallTextWidth("->");
-      DrawVLine(iconX, BASE_Y, lineH, C_FILL);
+      DrawVLine(iconX, lineY, lineH, C_FILL);
       PrintSmall(iconX + 2, BASE_Y, "->");
-      DrawVLine(iconX + 2 + arrowW + 1, BASE_Y, lineH, C_FILL);
-      uint8_t directW = 2 + arrowW + 1 + 2; /* 直频图标总宽 */
-      uint8_t powerX = iconX + directW + STATUS_GAP;
+      DrawVLine(iconX + 2 + arrowW + 1, lineY, lineH, C_FILL);
+      uint8_t directW = 2 + arrowW + 1 + 0; /* 直频图标总宽，右侧不留空 */
+      uint8_t powerX = iconX + directW + 1 + 2;  /* 与图标间隔 1px，再右移 2px 避免与直频重合 */
       PrintSmall(powerX, BASE_Y, "%s", powerStr[pw]);
-      PrintSmall(powerX + powerW + STATUS_GAP, BASE_Y, "%s",
+      PrintSmall(powerX + powerW - 2, BASE_Y, "%s",  /* 功率右侧整体左移 2px */
                  statuslineTicker[0] ? statuslineTicker : statuslineText);
     } else if (gCurrentApp == APP_VFO1) {
       /* 无直频时整体前移：功率从 textLeft 起 → [GAP] → 状态文字 */
