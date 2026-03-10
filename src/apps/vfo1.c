@@ -69,7 +69,8 @@ static bool handleNumNav(KEY_Code_t key) {
   if (key <= KEY_9) {
     NUMNAV_Init(vfo->channel_index, 0, CHANNELS_GetCountMax() - 1);
     gNumNavCallback = setChannel;
-    return false;
+    NUMNAV_Input(key); /* 信道模式：首位数字键立即送入 NumNav */
+    return true;
   }
 
   return false;
@@ -170,6 +171,9 @@ static bool handleRelease(KEY_Code_t key, Key_State_t state) {
   case KEY_7:
   case KEY_8:
   case KEY_9:
+    /* 频率模式下数字键进入频率输入；信道模式下由 handleNumNav 选信道，不进入频率输入 */
+    if (vfo->mode != MODE_VFO)
+      return false;
     gFInputCallback = tuneTo;
     FINPUT_setup(0, BK4819_F_MAX, UNIT_MHZ, false);
     APPS_run(APP_FINPUT);

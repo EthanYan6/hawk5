@@ -22,6 +22,7 @@ static uint32_t lastTickerUpdate = 0;
 
 static char statuslineText[32] = {0};
 static char statuslineTicker[32] = {0};
+static bool showDirectIcon = false; /* 直频时用图形画 |->|，避免字体竖线断成两段 */
 
 void STATUSLINE_SetText(const char *pattern, ...) {
   char statuslineTextNew[32] = {0};
@@ -85,7 +86,7 @@ void STATUSLINE_render(void) {
       if (i < n)
         FillRect(x, byBase - h, 2, h, C_FILL);
     }
-    /* 文字从 20 起；电池左缘=115；图标区右缘=105 */
+    /* 文字从 20 起；功率在直频符号右侧绘制 */
     textLeft = 20;
   }
 
@@ -136,13 +137,51 @@ void STATUSLINE_render(void) {
     UI_Scanlists(LCD_XCENTER - 13, 0, gSettings.currentScanlist);
   }
 
-  PrintSymbolsEx(LCD_WIDTH - 1 - 22, BASE_Y, POS_R, C_FILL, "%s", icons);
+  /* 仅 Motorola R7 页面：右侧图标等间距重排；其他页面保持原逻辑 */
+  if (gCurrentApp == APP_VFO1) {
+#define ICON_SLOT_W 10
+    int16_t x = (int16_t)(LCD_WIDTH - 1 - 22);
+    for (int8_t i = (int8_t)idx - 1; i >= 0; i--) {
+      char slot[2] = {icons[i], '\0'};
+      PrintSymbolsEx((uint8_t)x, BASE_Y, POS_R, C_FILL, "%s", slot);
+      x -= ICON_SLOT_W;
+    }
+  } else {
+    PrintSymbolsEx(LCD_WIDTH - 1 - 22, BASE_Y, POS_R, C_FILL, "%s", icons);
+  }
 
   if (gIsNumNavInput) {
     PrintSmall(textLeft, BASE_Y, "Select: %s", gNumNavInput);
   } else {
-    PrintSmall(textLeft, BASE_Y, "%s",
-               statuslineTicker[0] ? statuslineTicker : statuslineText);
+    static const char *const powerStr[] = {"UL", "L", "M", "H"};
+    uint8_t pw = (uint8_t)ctx->power;
+    if (pw > 3)
+      pw = 0;
+    uint16_t powerW = Graphics_GetSmallTextWidth(powerStr[pw]);
+#define STATUS_GAP 2 /* 中间区域各元素统一间距 */
+
+    if (gCurrentApp == APP_VFO1 && showDirectIcon) {
+      /* 直频 |->| → [GAP] → 功率 → [GAP] → 状态文字 */
+      const uint8_t lineH = 6;
+      const uint8_t iconX = textLeft;
+      uint16_t arrowW = Graphics_GetSmallTextWidth("->");
+      DrawVLine(iconX, BASE_Y, lineH, C_FILL);
+      PrintSmall(iconX + 2, BASE_Y, "->");
+      DrawVLine(iconX + 2 + arrowW + 1, BASE_Y, lineH, C_FILL);
+      uint8_t directW = 2 + arrowW + 1 + 2; /* 直频图标总宽 */
+      uint8_t powerX = iconX + directW + STATUS_GAP;
+      PrintSmall(powerX, BASE_Y, "%s", powerStr[pw]);
+      PrintSmall(powerX + powerW + STATUS_GAP, BASE_Y, "%s",
+                 statuslineTicker[0] ? statuslineTicker : statuslineText);
+    } else if (gCurrentApp == APP_VFO1) {
+      /* 无直频时整体前移：功率从 textLeft 起 → [GAP] → 状态文字 */
+      PrintSmall(textLeft, BASE_Y, "%s", powerStr[pw]);
+      PrintSmall(textLeft + powerW + STATUS_GAP, BASE_Y, "%s",
+                 statuslineTicker[0] ? statuslineTicker : statuslineText);
+    } else {
+      PrintSmall(textLeft, BASE_Y, "%s",
+                 statuslineTicker[0] ? statuslineTicker : statuslineText);
+    }
   }
 }
 
@@ -165,17 +204,19 @@ void STATUSLINE_RenderRadioSettings() {
     uint32_t rxF = RADIO_GetParam(ctx, PARAM_FREQUENCY);
     uint32_t txF = RADIO_GetParam(ctx, PARAM_TX_FREQUENCY_FACT);
     bool direct = (rxF == txF);
+    showDirectIcon = direct;
     if (bandwidth[0] == '\0') {
-      /* WFM 等无带宽时不显示带宽 */
+      /* WFM 等无带宽时不显示带宽；直频时不再在字符串里写 "|->| "，由 render 用图形画竖线 */
       STATUSLINE_SetText("%s %s %s %s",
-                        direct ? "|->| " : "", squelch_type, squelch_value,
+                        direct ? " " : "", squelch_type, squelch_value,
                         step);
     } else {
       STATUSLINE_SetText("%s %s %s %s %s",
-                        direct ? "|->| " : "", bandwidth,
+                        direct ? " " : "", bandwidth,
                         squelch_type, squelch_value, step);
     }
   } else {
+    showDirectIcon = false;
     if (bandwidth[0] == '\0') {
       STATUSLINE_SetText("%s %s %s %s", gain, squelch_type, squelch_value,
                          modulation);
