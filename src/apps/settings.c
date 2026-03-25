@@ -41,6 +41,15 @@ static bool calibrate(const MenuItem *item, KEY_Code_t key, Key_State_t state) {
   return true;
 }
 
+static bool runReset(const MenuItem *item, KEY_Code_t key, Key_State_t state) {
+  (void)item;
+  if (state == KEY_RELEASED && key == KEY_MENU) {
+    APPS_run(APP_RESET);
+    return true;
+  }
+  return false;
+}
+
 // SQL submenu
 static const MenuItem sqlMenuItems[] = {
     {"Open t", SETTING_SQLOPENTIME, getValS, updateValS},
@@ -116,6 +125,7 @@ static const MenuItem menuItems[] = {
     {"Beep", SETTING_BEEP, getValS, updateValS},
     {"Main app", SETTING_MAINAPP, getValS, updateValS},
     {"Lock PTT", SETTING_PTT_LOCK, getValS, updateValS},
+    {"Reset", .action = runReset},
 };
 
 static Menu settingsMenu = {

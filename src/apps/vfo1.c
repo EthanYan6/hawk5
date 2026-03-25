@@ -308,41 +308,32 @@ static void renderCenterBlock(uint32_t f) {
     DrawRect(RECT_BAR_W, RECT_TOP, LCD_WIDTH - RECT_BAR_W, rectH, C_FILL);
   }
 
-  /* 框内右上角：接收灵敏度(dBm)，右移 1px */
-  if (vfo->msm.rssi) {
+  /* 框内右上角：平时显示信道号；接收信号时显示 dBm（互斥） */
+  FillRect(rectR - 58, RECT_TOP + 1, 58, 8, C_CLEAR);
+  if (vfo->msm.open && vfo->msm.rssi) {
     int16_t dBm = Rssi2DBm(vfo->msm.rssi);
     if (ctx->radio_type == RADIO_BK4819)
       dBm += (int16_t)BK4819_GetAttenuation();
     PrintSmallEx(rectR + 2, RECT_TOP + 6, POS_R, C_FILL, "%+d dBm", dBm);
-  } else {
-    PrintSmallEx(rectR + 2, RECT_TOP + 6, POS_R, C_FILL, "-- dBm");
+  } else if (vfo->mode == MODE_CHANNEL) {
+    PrintSmallEx(rectR + 2, RECT_TOP + 6, POS_R, C_FILL, "%03u",
+                 vfo->channel_index + 1);
   }
 
-  /* 第一行：信道号或 VFO 用小字+底色反色；下移 3px */
+  /* 第一行：信道名或 VFO 标识（不反显）；下移 3px */
   const uint8_t line1Y = RECT_TOP + 10;
   const uint8_t boxX = RECT_CONTENT_X + 2;
   if (vfo->mode == MODE_CHANNEL) {
-    const uint8_t badgeW = 28; /* 底色向右再增加 1 像素 */
-    const uint8_t badgeH = 7;
-    const uint8_t badgeY = line1Y - 6;
-    FillRect(boxX, badgeY, badgeW, badgeH, C_FILL);
-    PrintSmallEx(boxX + 2, line1Y - 1, POS_L, C_INVERT, "MR %03u",
-                 vfo->channel_index + 1);
-    PrintMediumEx(boxX + badgeW + 2, line1Y, POS_L, C_FILL, "%s", ctx->name);
+    PrintMediumEx(boxX, line1Y, POS_L, C_FILL, "%s", ctx->name);
   } else {
-    const uint8_t badgeW = 16; /* 底色向右再增加 1 像素 */
-    const uint8_t badgeH = 7;
-    const uint8_t badgeY = line1Y - 6;
-    FillRect(boxX, badgeY, badgeW, badgeH, C_FILL);
-    PrintSmallEx(boxX + 2, line1Y - 1, POS_L, C_INVERT, "VFO");
+    PrintMediumEx(boxX, line1Y, POS_L, C_FILL, "VFO");
   }
   /* 第二行：大号频率；下移 2px */
-  const uint8_t freqY = RECT_TOP + 27;
-  Graphics_SetSlant(4); /* 顶部偏移约 3 像素，随 yy 线性减至 0 */
-  PrintBiggestDigitsEx(boxX, freqY, POS_L, C_FILL,
+  const uint8_t freqY = RECT_TOP + 24;
+  /* Motorola R7 主界面：频率数字用常规（不倾斜）并略小一号 */
+  PrintBigDigitsEx(boxX, freqY, POS_L, C_FILL,
                        "%4u.%03u", f / MHZ, f / 100 % 1000);
-  PrintMediumEx(boxX + 73, freqY, POS_L, C_FILL, "%02u", f % 100);
-  Graphics_SetSlant(0);
+  PrintMediumEx(boxX + 66, freqY - 4, POS_L, C_FILL, "%02u", f % 100);
 }
 
 /* 底部两个实心方框：向上增高 2 像素；框内 Menu/调制 文字上移 1 像素 */
