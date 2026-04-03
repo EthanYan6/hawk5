@@ -21,10 +21,8 @@ make
 以下为与当前 `src/apps/vfo1.c`、`src/ui/statusline.c` 绘制逻辑一致的布局说明。
 
 ### 布局示意图
+<img width="799" height="600" alt="image" src="https://github.com/user-attachments/assets/663ac128-385f-4498-a239-7645c3537dba" />
 
-![主界面布局示意](docs/main-screen-design.svg)
-
-（矢量图；GitHub / VS Code 等可直接预览。若需位图可自行从 SVG 导出。）
 
 ### 结构（Mermaid）
 
