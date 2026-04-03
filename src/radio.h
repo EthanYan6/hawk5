@@ -209,6 +209,7 @@ void RADIO_EnableAudioRouting(RadioState *state, bool enable);
 void RADIO_UpdateAudioRouting(RadioState *state);
 
 void RADIO_ToggleTX(VFOContext *ctx, bool on);
+TXStatus RADIO_CheckTXAllowed(VFOContext *ctx);
 bool RADIO_IsSSB(const VFOContext *ctx);
 const char *RADIO_GetParamValueString(const VFOContext *ctx, ParamType param);
 

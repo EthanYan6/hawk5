@@ -11,7 +11,8 @@ BIN_DIR       := bin
 PROJECT_NAME  := firmware
 TARGET        := $(BIN_DIR)/$(PROJECT_NAME)
 GIT_HASH      := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_TIME    := $(shell date -u +'%Y-%m-%d_%H:%M_UTC')
+# 编译时刻（北京时间 Asia/Shanghai）+ 尾缀 BJ；需 GNU date（Git Bash/MSYS2/Linux）
+BUILD_TIME    := $(shell TZ=Asia/Shanghai date +'%y%m%d-%H:%M')BJ
 BUILD_TAG     := $(shell date -u +'%Y%m%d_%H%M')
 
 # =============================================================================
@@ -52,7 +53,9 @@ COMMON_FLAGS := -mcpu=cortex-m0 -mthumb -mabi=aapcs
 # LTO 可显著减小体积；Windows 下若 lto-wrapper 报错则执行 make LTO=0
 LTO ?= 1
 ifeq ($(LTO),1)
-OPTIMIZATION := -Os -flto=1 -ffunction-sections -fdata-sections
+# -fno-fat-lto-objects：.o 仅保留 LTO 字节码；partition=one / 关闭 partial-inlining 常能再省 Flash
+OPTIMIZATION := -Os -flto=1 -fno-fat-lto-objects -flto-partition=one \
+                -fno-partial-inlining -ffunction-sections -fdata-sections
 else
 OPTIMIZATION := -Os -ffunction-sections -fdata-sections
 endif
@@ -72,6 +75,10 @@ CFLAGS   := $(COMMON_FLAGS) $(OPTIMIZATION) \
             -fsingle-precision-constant \
             -finline-functions-called-once \
             -fno-unwind-tables -fno-asynchronous-unwind-tables \
+            -fno-stack-protector \
+            -fno-ident \
+            -fmerge-all-constants \
+            -ffreestanding \
             -MMD -MP
 
 # Debug/Release specific flags
@@ -99,6 +106,9 @@ LDFLAGS  := $(COMMON_FLAGS) $(OPTIMIZATION) \
             --specs=nano.specs \
             -lc -lnosys \
             -Wl,--gc-sections \
+            -Wl,--relax \
+            -Wl,-O1 \
+            -Wl,--strip-all \
             -Wl,--build-id=none \
             -Wl,--print-memory-usage \
             -Wl,-Map=$(OBJ_DIR)/output.map

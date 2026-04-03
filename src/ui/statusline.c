@@ -4,7 +4,6 @@
 #include "../driver/si473x.h"
 #include "../driver/st7565.h"
 #include "../helper/bands.h"
-#include "../helper/battery.h"
 #include "../helper/channels.h"
 #include "../helper/measurements.h"
 #include "../helper/numnav.h"
@@ -13,9 +12,6 @@
 #include "graphics.h"
 #include <stdio.h>
 #include <string.h>
-
-static uint8_t previousBatteryLevel = 255;
-static bool showBattery = true;
 
 static uint32_t lastEepromWrite = 0;
 static uint32_t lastTickerUpdate = 0;
@@ -37,19 +33,6 @@ void STATUSLINE_SetText(const char *pattern, ...) {
 }
 
 void STATUSLINE_update(void) {
-  // BATTERY_UpdateBatteryInfo();
-  uint8_t level = gBatteryPercent / 10;
-  if (gBatteryPercent < BAT_WARN_PERCENT) {
-    showBattery = !showBattery;
-    gRedrawScreen = true;
-  } else {
-    showBattery = true;
-  }
-  if (previousBatteryLevel != level) {
-    previousBatteryLevel = level;
-    gRedrawScreen = true;
-  }
-
   if ((bool)lastEepromWrite != gEepromWrite) {
     lastEepromWrite = gEepromWrite ? Now() : 0;
     gRedrawScreen = true;
@@ -90,22 +73,6 @@ void STATUSLINE_render(void) {
     textLeft = 20;
   }
 
-  if (showBattery) {
-    switch (gSettings.batteryStyle) {
-    case BAT_CLEAN:
-      UI_Battery(previousBatteryLevel);
-      break;
-    case BAT_PERCENT:
-      PrintSmallEx(LCD_WIDTH - 1, BASE_Y, POS_R, C_INVERT, "%u%%",
-                   gBatteryPercent);
-      break;
-    case BAT_VOLTAGE:
-      PrintSmallEx(LCD_WIDTH - 1, BASE_Y, POS_R, C_FILL, "%u.%02uV",
-                   gBatteryVoltage / 100, gBatteryVoltage % 100);
-      break;
-    }
-  }
-
   char icons[8] = {'\0'};
   uint8_t idx = 0;
 
@@ -137,7 +104,7 @@ void STATUSLINE_render(void) {
     UI_Scanlists(LCD_XCENTER - 13, 0, gSettings.currentScanlist);
   }
 
-  /* 仅 Motorola R7 页面：右侧图标等间距重排；其他页面保持原逻辑 */
+  /* 仅 vfo app 主界面：右侧图标等间距重排；其他页面保持原逻辑 */
   if (gCurrentApp == APP_VFO1) {
 #define ICON_SLOT_W 10
     int16_t x = (int16_t)(LCD_WIDTH - 1 - 22);

@@ -89,7 +89,7 @@ const App apps[APPS_COUNT] = {
     [APP_BAND_SCAN] = {"Band Scan", BANDSCAN_init, BANDSCAN_update,
                        BANDSCAN_render, BANDSCAN_key, BANDSCAN_deinit, true},
     [APP_FC] = {"FC", FC_init, FC_update, FC_render, FC_key, FC_deinit, true},
-    [APP_VFO1] = {"1 Motorola R7", VFO1_init, VFO1_update, VFO1_render, VFO1_key, NULL,
+    [APP_VFO1] = {"1 vfo app", VFO1_init, VFO1_update, VFO1_render, VFO1_key, NULL,
                   true},
     /* [APP_GENERATOR] = {"Generator", GENERATOR_init, GENERATOR_update,
                        GENERATOR_render, GENERATOR_key, NULL, true, true}, */

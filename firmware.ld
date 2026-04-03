@@ -9,7 +9,7 @@ _Min_Heap_Size = 0;      /* required amount of heap  */
 _Min_Stack_Size = 0x100; /* required amount of stack (256 bytes min recommended) */
 
 /* Specify the memory areas */
-/* 若芯片实际为 64KB Flash，可将下方 60K 改为 64K 以解决 overflow */
+/* 用户区 Flash 60KB 上限（与芯片/分区一致） */
 MEMORY
 {
     FLASH (rx)      : ORIGIN = 0x00000000, LENGTH = 60K
@@ -49,14 +49,7 @@ SECTIONS
         _etext = .;            /* define a global symbol at end of code */
     } >FLASH
 
-    /* Constant data goes into FLASH */
-    .rodata :
-    {
-        . = ALIGN(4);
-        *(.rodata)
-        *(.rodata*)
-        . = ALIGN(4);
-    } >FLASH
+    /* .rodata 已在上方 .text 中收集，勿再单独 output section，避免多余对齐浪费 */
 
     .ARM.extab :
     {

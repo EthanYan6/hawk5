@@ -47,7 +47,11 @@ static void appRender() {
 
   gRedrawScreen = false;
 
-  UI_ClearScreen();
+  if (gCurrentApp == APP_VFO1) {
+    FillRect(0, 0, LCD_WIDTH, LCD_HEIGHT, C_CLEAR);
+  } else {
+    UI_ClearScreen();
+  }
 
   APPS_render();
 
@@ -56,7 +60,9 @@ static void appRender() {
     PrintMediumEx(64, 32 + 2, POS_C, C_CLEAR, notificationMessage);
   }
 
-  STATUSLINE_render(); // coz of APPS_render calls STATUSLINE_SetText
+  if (gCurrentApp != APP_VFO1) {
+    STATUSLINE_render(); // coz of APPS_render calls STATUSLINE_SetText
+  }
 
   ST7565_Blit();
   gLastRender = Now();

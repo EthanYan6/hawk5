@@ -7,9 +7,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define BATTERY_W 13
-
-void UI_Battery(uint8_t Level);
 void UI_TxBar(uint8_t y);
 void UI_RSSIBar(uint8_t y);
 void UI_ShowWait();

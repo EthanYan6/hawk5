@@ -324,6 +324,8 @@ static TXStatus checkTX(VFOContext *ctx) {
   return TX_ON;
 }
 
+TXStatus RADIO_CheckTXAllowed(VFOContext *ctx) { return checkTX(ctx); }
+
 static void toggleBK4819(bool on) {
   static bool bk4819_listen;
   if (bk4819_listen == on) {
